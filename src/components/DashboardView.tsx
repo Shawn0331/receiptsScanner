@@ -1,12 +1,13 @@
 import React from 'react';
 import { Camera, TrendingUp, Receipt as ReceiptIcon, ArrowRight, Sparkles, ShoppingBag } from 'lucide-react';
-import type { Receipt, ExpenseItem, Category, LifestyleScore } from '../types/receipt';
+import type { Receipt, ExpenseItem, Category, LifestyleScore, CurrencyInfo } from '../types/receipt';
 
 interface DashboardViewProps {
   receipts: Receipt[];
   items: ExpenseItem[];
   categories: Category[];
   lifestyleScore: LifestyleScore;
+  baseCurrency?: CurrencyInfo;
   onStartScan: () => void;
   onViewHistory: () => void;
   onViewLifestyle: () => void;
@@ -18,12 +19,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   items,
   categories,
   lifestyleScore,
+  baseCurrency,
   onStartScan,
   onViewHistory,
   onViewLifestyle,
   onSelectReceipt,
 }) => {
-  const totalSpending = items.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
+  const currencySymbol = baseCurrency?.symbol || '$';
+  const totalSpending = Math.round(items.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0) * 100) / 100;
 
   // Calculate spending per category
   const categorySpendingMap = new Map<string, number>();
@@ -62,8 +65,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="mb-6">
-            <div className="text-3xl sm:text-4xl font-black tracking-tight flex items-baseline gap-1">
-              <span className="text-xl sm:text-2xl font-bold opacity-80">$</span>
+            <div className="text-3xl sm:text-4xl font-black tracking-tight flex items-baseline gap-1.5">
+              <span className="text-xl sm:text-2xl font-bold opacity-80">{currencySymbol}</span>
               <span>{totalSpending.toLocaleString()}</span>
             </div>
             <p className="text-xs text-emerald-100/70 mt-1">
@@ -150,7 +153,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </span>
                   </div>
                   <span className="font-bold text-slate-900">
-                    ${cat.total.toLocaleString()}
+                    {currencySymbol} {cat.total.toLocaleString()}
                   </span>
                 </div>
                 {/* Visual percentage bar */}
@@ -212,8 +215,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-black text-slate-900">
-                    ${rc.totalAmount.toLocaleString()}
+                    {currencySymbol} {rc.totalAmount.toLocaleString()}
                   </span>
+                  {rc.originalCurrency && rc.originalCurrency !== (baseCurrency?.code || 'MYR') && (
+                    <p className="text-[10px] text-sky-600 font-mono">
+                      (原幣 {rc.originalCurrency} {rc.originalTotalAmount})
+                    </p>
+                  )}
                   {rc.notes && (
                     <p className="text-[10px] text-emerald-600 truncate max-w-[120px]">
                       {rc.notes}

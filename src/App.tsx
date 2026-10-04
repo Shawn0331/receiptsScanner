@@ -9,10 +9,11 @@ import { ScannerModal } from './components/ScannerModal';
 import { ReviewModal } from './components/ReviewModal';
 import { MobileConnectModal } from './components/MobileConnectModal';
 
-import type { Receipt, ExpenseItem, Category, ReceiptScanResult } from './types/receipt';
+import type { Receipt, ExpenseItem, Category, ReceiptScanResult, CurrencyInfo } from './types/receipt';
 import { db, initializeDatabase } from './db/database';
 import { calculateLifestyleScore } from './services/lifestyleService';
 import { nativeService } from './services/nativeService';
+import { storageService } from './services/storageService';
 
 export function App() {
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
@@ -21,6 +22,7 @@ export function App() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
 
+  const [baseCurrency, setBaseCurrency] = useState<CurrencyInfo>(() => storageService.getBaseCurrency());
   const [categories, setCategories] = useState<Category[]>([]);
   const [allReceipts, setAllReceipts] = useState<Receipt[]>([]);
   const [allItems, setAllItems] = useState<ExpenseItem[]>([]);
@@ -80,6 +82,7 @@ export function App() {
             items={monthItems}
             categories={categories}
             lifestyleScore={lifestyleScore}
+            baseCurrency={baseCurrency}
             onStartScan={() => setIsScannerOpen(true)}
             onViewHistory={() => setCurrentTab('history')}
             onViewLifestyle={() => setCurrentTab('lifestyle')}
@@ -92,6 +95,7 @@ export function App() {
             receipts={allReceipts}
             items={allItems}
             categories={categories}
+            baseCurrency={baseCurrency}
             onRefresh={loadData}
           />
         )}
@@ -100,6 +104,7 @@ export function App() {
           <LifestyleView
             items={monthItems.length > 0 ? monthItems : allItems}
             lifestyleScore={lifestyleScore}
+            baseCurrency={baseCurrency}
             onStartScan={() => setIsScannerOpen(true)}
           />
         )}
@@ -108,6 +113,7 @@ export function App() {
           <SettingsView
             categories={categories}
             onCategoriesChanged={loadData}
+            onCurrencyChanged={() => setBaseCurrency(storageService.getBaseCurrency())}
             onDataReset={loadData}
           />
         )}
@@ -125,6 +131,7 @@ export function App() {
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
         categories={categories}
+        baseCurrency={baseCurrency}
         onScanComplete={handleScanComplete}
       />
 
@@ -135,6 +142,7 @@ export function App() {
         scanResult={scanResult}
         imageBlob={scannedImageBlob}
         categories={categories}
+        baseCurrency={baseCurrency}
         onSaveSuccess={loadData}
       />
 

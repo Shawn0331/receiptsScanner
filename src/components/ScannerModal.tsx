@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Camera, Upload, X, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
-import type { ReceiptScanResult, Category } from '../types/receipt';
+import type { ReceiptScanResult, Category, CurrencyInfo } from '../types/receipt';
 import { parseReceiptWithGemini, getMockScanResult } from '../services/geminiService';
 import { storageService } from '../services/storageService';
 import { nativeService } from '../services/nativeService';
@@ -9,6 +9,7 @@ interface ScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
   categories: Category[];
+  baseCurrency?: CurrencyInfo;
   onScanComplete: (result: ReceiptScanResult, imageBlob: string) => void;
 }
 
@@ -16,6 +17,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
   isOpen,
   onClose,
   categories,
+  baseCurrency,
   onScanComplete,
 }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -48,7 +50,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
     setErrorMessage(null);
 
     try {
-      const result = await parseReceiptWithGemini(imageDataUrl, categories);
+      const result = await parseReceiptWithGemini(imageDataUrl, categories, baseCurrency);
       onScanComplete(result, imageDataUrl);
       handleClose();
     } catch (err: any) {
@@ -63,11 +65,11 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
     setIsProcessing(true);
     setErrorMessage(null);
     // Standard mock receipt image svg
-    const mockImageSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600"><rect width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="80" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="bold" fill="%231e293b">7-ELEVEN 統一超商</text><text x="50%" y="120" text-anchor="middle" font-family="sans-serif" font-size="14" fill="%2364748b">電子發票證明聯</text><line x1="40" y1="150" x2="360" y2="150" stroke="%23cbd5e1" stroke-dasharray="4"/><text x="40" y="190" font-family="sans-serif" font-size="15" fill="%23334155">特大杯美式咖啡 (冰)</text><text x="360" y="190" text-anchor="end" font-family="sans-serif" font-size="15" fill="%23334155">$60</text><text x="40" y="230" font-family="sans-serif" font-size="15" fill="%23334155">波的多洋芋片蚵仔煎風味</text><text x="360" y="230" text-anchor="end" font-family="sans-serif" font-size="15" fill="%23334155">$35</text><text x="40" y="270" font-family="sans-serif" font-size="15" fill="%23334155">舒潔抽取式衛生紙</text><text x="360" y="270" text-anchor="end" font-family="sans-serif" font-size="15" fill="%23334155">$90</text><line x1="40" y1="310" x2="360" y2="310" stroke="%23cbd5e1"/><text x="40" y="350" font-family="sans-serif" font-size="18" font-weight="bold" fill="%230f172a">總計 TOTAL</text><text x="360" y="350" text-anchor="end" font-family="sans-serif" font-size="20" font-weight="bold" fill="%230f172a">$185</text></svg>`;
+    const mockImageSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600"><rect width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="80" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="bold" fill="%231e293b">FamilyMart 日本涉谷門市</text><text x="50%" y="120" text-anchor="middle" font-family="sans-serif" font-size="14" fill="%2364748b">RECEIPT (JPY)</text><line x1="40" y1="150" x2="360" y2="150" stroke="%23cbd5e1" stroke-dasharray="4"/><text x="40" y="190" font-family="sans-serif" font-size="15" fill="%23334155">極上黑咖啡 (Black Coffee)</text><text x="360" y="190" text-anchor="end" font-family="sans-serif" font-size="15" fill="%23334155">¥300</text><text x="40" y="230" font-family="sans-serif" font-size="15" fill="%23334155">北海道特濃牛乳生乳卷</text><text x="360" y="230" text-anchor="end" font-family="sans-serif" font-size="15" fill="%23334155">¥1200</text><text x="40" y="270" font-family="sans-serif" font-size="15" fill="%23334155">休足時間舒緩貼布</text><text x="360" y="270" text-anchor="end" font-family="sans-serif" font-size="15" fill="%23334155">¥1000</text><line x1="40" y1="310" x2="360" y2="310" stroke="%23cbd5e1"/><text x="40" y="350" font-family="sans-serif" font-size="18" font-weight="bold" fill="%230f172a">總計 TOTAL</text><text x="360" y="350" text-anchor="end" font-family="sans-serif" font-size="20" font-weight="bold" fill="%230f172a">¥2500</text></svg>`;
     
     setSelectedImage(mockImageSvg);
     await new Promise((r) => setTimeout(r, 1200));
-    const demoResult = getMockScanResult();
+    const demoResult = getMockScanResult(baseCurrency);
     onScanComplete(demoResult, mockImageSvg);
     setIsProcessing(false);
     handleClose();

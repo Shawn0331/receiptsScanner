@@ -1,18 +1,21 @@
 import React from 'react';
 import { Coffee, Heart, Utensils, Award, Camera } from 'lucide-react';
-import type { ExpenseItem, LifestyleScore } from '../types/receipt';
+import type { ExpenseItem, LifestyleScore, CurrencyInfo } from '../types/receipt';
 
 interface LifestyleViewProps {
   items: ExpenseItem[];
   lifestyleScore: LifestyleScore;
+  baseCurrency?: CurrencyInfo;
   onStartScan: () => void;
 }
 
 export const LifestyleView: React.FC<LifestyleViewProps> = ({
   items,
   lifestyleScore,
+  baseCurrency,
   onStartScan,
 }) => {
+  const currencySymbol = baseCurrency?.symbol || '$';
   const totalSpending = items.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
 
   // Lifestyle percentages
@@ -48,13 +51,13 @@ export const LifestyleView: React.FC<LifestyleViewProps> = ({
 
           <div className="pt-2 flex flex-wrap gap-2 text-[11px] font-semibold">
             <span className="px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm border border-white/15">
-              ☕ 咖啡因 ${lifestyleScore.caffeineSpending.toLocaleString()}
+              ☕ 咖啡因 {currencySymbol} {lifestyleScore.caffeineSpending.toLocaleString()}
             </span>
             <span className="px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm border border-white/15">
-              🧋 罪惡美食 ${lifestyleScore.guiltySpending.toLocaleString()}
+              🧋 罪惡美食 {currencySymbol} {lifestyleScore.guiltySpending.toLocaleString()}
             </span>
             <span className="px-3 py-1 rounded-full bg-white/15 backdrop-blur-sm border border-white/15">
-              🥦 自律生鮮 ${lifestyleScore.healthySpending.toLocaleString()}
+              🥦 自律生鮮 {currencySymbol} {lifestyleScore.healthySpending.toLocaleString()}
             </span>
           </div>
         </div>
@@ -93,7 +96,7 @@ export const LifestyleView: React.FC<LifestyleViewProps> = ({
           </div>
           <p className="text-[11px] text-slate-400">
             {lifestyleScore.caffeineCount > 0
-              ? `平均每杯約 $${Math.round(lifestyleScore.caffeineSpending / (lifestyleScore.caffeineCount || 1))} 元，續命能量充沛！`
+              ? `平均每杯約 ${currencySymbol} ${Math.round(lifestyleScore.caffeineSpending / (lifestyleScore.caffeineCount || 1))}，續命能量充沛！`
               : '本期尚未檢測到咖啡開銷，看來是自然精神飽滿的一天！'}
           </p>
         </div>
@@ -129,7 +132,7 @@ export const LifestyleView: React.FC<LifestyleViewProps> = ({
           </div>
           <p className="text-[11px] text-slate-400">
             {lifestyleScore.guiltyCount > 0
-              ? `累積罪惡消費 $${lifestyleScore.guiltySpending.toLocaleString()}，適時犒賞讓心靈感到幸福！`
+              ? `累積罪惡消費 ${currencySymbol} ${lifestyleScore.guiltySpending.toLocaleString()}，適時犒賞讓心靈感到幸福！`
               : '非常克制！本期沒有額外的高糖與罪惡零食支出。'}
           </p>
         </div>
@@ -165,7 +168,7 @@ export const LifestyleView: React.FC<LifestyleViewProps> = ({
           </div>
           <p className="text-[11px] text-slate-400">
             {lifestyleScore.healthyCount > 0
-              ? `投入 $${lifestyleScore.healthySpending.toLocaleString()} 在優質食材與健康上，身體會感謝你！`
+              ? `投入 ${currencySymbol} ${lifestyleScore.healthySpending.toLocaleString()} 在優質食材與健康上，身體會感謝你！`
               : '別忘了多去生鮮超市買點新鮮蔬果與雞蛋補充營養喔～'}
           </p>
         </div>
@@ -205,7 +208,7 @@ export const LifestyleView: React.FC<LifestyleViewProps> = ({
           </div>
           <p className="text-[11px] text-slate-400">
             {cookingTotal > 0
-              ? `自煮採購 $${lifestyleScore.homeCookingSpending} · 外食外送 $${lifestyleScore.diningOutSpending}`
+              ? `自煮採購 ${currencySymbol} ${lifestyleScore.homeCookingSpending} · 外食外送 ${currencySymbol} ${lifestyleScore.diningOutSpending}`
               : '持續記錄發票即可精準計算你的飲食習慣！'}
           </p>
         </div>

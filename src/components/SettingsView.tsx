@@ -1,25 +1,31 @@
 import React, { useState, useRef } from 'react';
-import { Key, Save, Download, Upload, Trash2, Plus, Sparkles, Check, Eye, EyeOff, Database } from 'lucide-react';
-import type { Category } from '../types/receipt';
-import { storageService } from '../services/storageService';
+import { Key, Save, Download, Upload, Trash2, Plus, Sparkles, Check, Eye, EyeOff, Database, Globe, Coins } from 'lucide-react';
+import type { Category, CurrencyInfo } from '../types/receipt';
+import { storageService, SUPPORTED_CURRENCIES } from '../services/storageService';
 import { db } from '../db/database';
 import { exportToCsv, exportBackupJson, importBackupJson } from '../services/exportService';
 
 interface SettingsViewProps {
   categories: Category[];
   onCategoriesChanged: () => void;
+  onCurrencyChanged: () => void;
   onDataReset: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   categories,
   onCategoriesChanged,
+  onCurrencyChanged,
   onDataReset,
 }) => {
   const [apiKey, setApiKey] = useState(storageService.getApiKey());
   const [modelName, setModelName] = useState(storageService.getModelName());
   const [showKey, setShowKey] = useState(false);
   const [keySaveMessage, setKeySaveMessage] = useState<string | null>(null);
+
+  // Currency State
+  const [currentCurrency, setCurrentCurrency] = useState<CurrencyInfo>(storageService.getBaseCurrency());
+  const [currencySaveMessage, setCurrencySaveMessage] = useState<string | null>(null);
 
   // New Category State
   const [newCatName, setNewCatName] = useState('');
@@ -143,6 +149,85 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           >
             <Save className="w-4 h-4" />
             <span>儲存設定</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Base Currency Configuration */}
+      <div className="p-5 sm:p-6 bg-white rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+            <Coins className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-800">居住地主要幣別 (Base Currency)</h2>
+            <p className="text-xs text-slate-400">出國旅行時掃描外幣發票，將自動換算為此幣別</p>
+          </div>
+        </div>
+
+        {currencySaveMessage && (
+          <div className="p-3 bg-emerald-50 text-emerald-700 text-xs rounded-xl flex items-center gap-2 border border-emerald-200">
+            <Check className="w-4 h-4" />
+            <span>{currencySaveMessage}</span>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                選擇常用貨幣
+              </label>
+              <select
+                value={currentCurrency.code}
+                onChange={(e) => {
+                  const found = SUPPORTED_CURRENCIES.find((c) => c.code === e.target.value);
+                  if (found) {
+                    setCurrentCurrency(found);
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              >
+                {SUPPORTED_CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name} ({c.symbol})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                貨幣符號 (如: RM, $, NT$)
+              </label>
+              <input
+                type="text"
+                value={currentCurrency.symbol}
+                onChange={(e) => setCurrentCurrency({ ...currentCurrency, symbol: e.target.value })}
+                placeholder="貨幣符號"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              />
+            </div>
+          </div>
+
+          <div className="p-3 bg-amber-50/70 border border-amber-200/70 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900">
+            <Globe className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+            <div>
+              目前設定居住地貨幣為：<strong className="text-amber-950">{currentCurrency.name}</strong>（符號：<span className="font-bold">{currentCurrency.symbol}</span>）。出國拍攝外幣收據（如日圓 JPY、美金 USD），AI 會自動依即時匯率換算入帳！
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              storageService.setBaseCurrency(currentCurrency);
+              setCurrencySaveMessage('居住地幣別已更新！');
+              onCurrencyChanged();
+              setTimeout(() => setCurrencySaveMessage(null), 3000);
+            }}
+            className="w-full py-2.5 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+          >
+            <Save className="w-4 h-4" />
+            <span>儲存幣別設定</span>
           </button>
         </div>
       </div>

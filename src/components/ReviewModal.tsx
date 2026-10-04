@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { X, Check, Plus, Trash2, Store, Calendar, Sparkles, AlertCircle, ZoomIn } from 'lucide-react';
+import { X, Check, Plus, Trash2, Store, Calendar, Sparkles, ZoomIn, Globe, ArrowRightLeft } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import type { ReceiptScanResult, Category, ExpenseItem, Receipt, LifestyleTag } from '../types/receipt';
+import type { ReceiptScanResult, Category, ExpenseItem, Receipt, LifestyleTag, CurrencyInfo } from '../types/receipt';
 import { saveReceiptWithItems } from '../db/database';
 import { nativeService } from '../services/nativeService';
+import { storageService } from '../services/storageService';
 
 interface ReviewModalProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface ReviewModalProps {
   scanResult: ReceiptScanResult | null;
   imageBlob: string | null;
   categories: Category[];
+  baseCurrency?: CurrencyInfo;
   onSaveSuccess: () => void;
 }
 
@@ -20,35 +22,49 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   scanResult,
   imageBlob,
   categories,
+  baseCurrency,
   onSaveSuccess,
 }) => {
   if (!isOpen || !scanResult) return null;
 
-  // Local editable state
+  const userCurrency = baseCurrency || storageService.getBaseCurrency();
+
+  // Currency & Exchange rate state
+  const detectedCurrency = scanResult.detectedCurrency || userCurrency.code;
+  const [exchangeRate, setExchangeRate] = useState<number>(
+    scanResult.exchangeRate || 1.0
+  );
+
+  const isOverseas = detectedCurrency !== userCurrency.code;
+
+  // Local editable receipt state
   const [storeName, setStoreName] = useState(scanResult.storeName || '未知商店');
   const [purchaseDate, setPurchaseDate] = useState(scanResult.purchaseDate || new Date().toISOString().split('T')[0]);
   const totalAmount = scanResult.totalAmount || 0;
   const [showImageZoom, setShowImageZoom] = useState(false);
 
-  // Initialize items with matched categoryId
+  // Initialize items with matched categoryId and dual prices
   const [items, setItems] = useState<Array<{
     id: string;
     itemName: string;
-    price: number;
+    price: number; // Converted price in user's base currency
+    originalPrice: number; // Price in receipt's original currency
     quantity: number;
     categoryId: string;
     lifestyleTags: LifestyleTag[];
     funNote?: string;
   }>>(() => {
     return scanResult.items.map((item, idx) => {
-      // Find matching category ID or fallback to first or 'cat_other'
       const matched = categories.find((c) => c.name === item.suggestedCategory);
       const defaultId = categories.find((c) => c.id === 'cat_other')?.id || categories[0]?.id || 'cat_food';
+      const origPrice = item.originalPrice !== undefined ? item.originalPrice : item.price;
+      const convPrice = item.price;
 
       return {
         id: `item_${Date.now()}_${idx}`,
         itemName: item.itemName,
-        price: item.price,
+        price: convPrice,
+        originalPrice: origPrice,
         quantity: item.quantity || 1,
         categoryId: matched ? matched.id : defaultId,
         lifestyleTags: item.lifestyleTags || [],
@@ -57,11 +73,41 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
     });
   });
 
-  const calculatedSubtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const calculatedSubtotal = Math.round(
+    items.reduce((sum, item) => sum + item.price * item.quantity, 0) * 100
+  ) / 100;
+
+  const originalSubtotal = Math.round(
+    items.reduce((sum, item) => sum + item.originalPrice * item.quantity, 0) * 100
+  ) / 100;
+
+  // Handle Exchange Rate modification: recalculates converted price of all items
+  const handleExchangeRateChange = (newRate: number) => {
+    setExchangeRate(newRate);
+    if (newRate > 0) {
+      setItems((prev) =>
+        prev.map((it) => ({
+          ...it,
+          price: Math.round(it.originalPrice * newRate * 100) / 100,
+        }))
+      );
+    }
+  };
 
   const handleUpdateItem = (id: string, field: string, val: any) => {
     setItems((prev) =>
-      prev.map((it) => (it.id === id ? { ...it, [field]: val } : it))
+      prev.map((it) => {
+        if (it.id !== id) return it;
+        if (field === 'originalPrice') {
+          const newOrig = Number(val) || 0;
+          return {
+            ...it,
+            originalPrice: newOrig,
+            price: isOverseas ? Math.round(newOrig * exchangeRate * 100) / 100 : newOrig,
+          };
+        }
+        return { ...it, [field]: val };
+      })
     );
   };
 
@@ -73,6 +119,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
         id: `item_${Date.now()}_${Math.random()}`,
         itemName: '新商品',
         price: 0,
+        originalPrice: 0,
         quantity: 1,
         categoryId: defaultCatId,
         lifestyleTags: [],
@@ -91,6 +138,10 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       storeName,
       purchaseDate,
       totalAmount: calculatedSubtotal > 0 ? calculatedSubtotal : totalAmount,
+      currency: userCurrency.code,
+      originalCurrency: detectedCurrency,
+      exchangeRate: isOverseas ? exchangeRate : 1.0,
+      originalTotalAmount: originalSubtotal,
       imageBlob: imageBlob || undefined,
       createdAt: new Date().toISOString(),
       itemCount: items.length,
@@ -102,6 +153,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       receiptId: receiptId,
       itemName: it.itemName,
       price: Number(it.price) || 0,
+      originalPrice: Number(it.originalPrice) || 0,
       quantity: Number(it.quantity) || 1,
       categoryId: it.categoryId,
       purchaseDate: purchaseDate,
@@ -148,7 +200,51 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
         </div>
 
         {/* Scrollable Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+          {/* Overseas Multi-Currency Conversion Card */}
+          {isOverseas && (
+            <div className="p-4 bg-gradient-to-r from-sky-50 to-indigo-50 border border-sky-200/80 rounded-2xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-sky-500 text-white flex items-center justify-center text-xs">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-sky-900 flex items-center gap-1.5">
+                      <span>🌏 偵測到海外發票 ({detectedCurrency})</span>
+                      <ArrowRightLeft className="w-3 h-3 text-sky-600" />
+                      <span>自動換算為 {userCurrency.name}</span>
+                    </h3>
+                    <p className="text-[11px] text-sky-700/80">
+                      AI 依收據日期估算參考匯率，你可手動微調以符合刷卡帳單
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-sky-100">
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                  <span>參考匯率：</span>
+                  <span className="font-mono bg-white px-2 py-1 rounded-lg border border-sky-200 text-sky-900">
+                    1 {detectedCurrency} =
+                  </span>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={exchangeRate}
+                    onChange={(e) => handleExchangeRateChange(Number(e.target.value))}
+                    className="w-24 px-2 py-1 text-xs font-bold font-mono bg-white border border-sky-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500/30"
+                  />
+                  <span>{userCurrency.code}</span>
+                </div>
+
+                <div className="text-[11px] text-sky-800 font-medium ml-auto">
+                  原幣總計: <strong className="font-mono">{detectedCurrency} {originalSubtotal.toLocaleString()}</strong>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* AI Comment Bubble if present */}
           {scanResult.aiComment && (
             <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/60 rounded-2xl flex items-start gap-3">
@@ -252,17 +348,46 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
                       className="flex-1 px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
                     />
 
-                    {/* Price Input */}
-                    <div className="flex items-center w-24 relative">
-                      <span className="absolute left-2.5 text-xs text-slate-400">$</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={item.price}
-                        onChange={(e) => handleUpdateItem(item.id, 'price', Number(e.target.value))}
-                        className="w-full pl-6 pr-2 py-1.5 text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
-                      />
-                    </div>
+                    {/* Dual Price Input: Shows original price if overseas */}
+                    {isOverseas ? (
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex items-center w-20 relative">
+                          <span className="absolute left-1.5 text-[10px] text-slate-400">{detectedCurrency}</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={item.originalPrice}
+                            onChange={(e) => handleUpdateItem(item.id, 'originalPrice', e.target.value)}
+                            className="w-full pl-8 pr-1 py-1.5 text-xs font-mono font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500/20 focus:outline-none"
+                          />
+                        </div>
+                        <span className="text-[10px] text-slate-400">➔</span>
+                        <div className="flex items-center w-24 relative">
+                          <span className="absolute left-2 text-[10px] font-semibold text-emerald-600">{userCurrency.symbol}</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={item.price}
+                            onChange={(e) => handleUpdateItem(item.id, 'price', Number(e.target.value))}
+                            className="w-full pl-7 pr-2 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-50/60 border border-emerald-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center w-24 relative">
+                        <span className="absolute left-2.5 text-xs text-slate-400">{userCurrency.symbol}</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={item.price}
+                          onChange={(e) => handleUpdateItem(item.id, 'price', Number(e.target.value))}
+                          className="w-full pl-6 pr-2 py-1.5 text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                        />
+                      </div>
+                    )}
 
                     {/* Delete Item Button */}
                     <button
@@ -310,17 +435,18 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
           {/* Subtotal Calculation & Check */}
           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
             <div>
-              <div className="text-xs text-slate-500 font-medium">品項試算總和</div>
-              {totalAmount > 0 && totalAmount !== calculatedSubtotal && (
-                <div className="text-[11px] text-amber-600 flex items-center gap-1 mt-0.5">
-                  <AlertCircle className="w-3 h-3" />
-                  發票原標示總額 ${totalAmount}（品項總和 ${calculatedSubtotal}）
+              <div className="text-xs text-slate-500 font-medium">
+                換算後品項總和 ({userCurrency.name})
+              </div>
+              {isOverseas && (
+                <div className="text-[11px] text-sky-700 flex items-center gap-1 mt-0.5">
+                  原幣小計：{detectedCurrency} {originalSubtotal.toLocaleString()} (匯率 {exchangeRate})
                 </div>
               )}
             </div>
             <div className="text-right">
               <div className="text-lg font-black text-slate-900 tracking-tight">
-                ${calculatedSubtotal.toLocaleString()}
+                {userCurrency.symbol} {calculatedSubtotal.toLocaleString()}
               </div>
             </div>
           </div>
@@ -339,7 +465,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/30 active:scale-95 transition-all flex items-center gap-1.5"
           >
             <Check className="w-4 h-4 stroke-[2.5]" />
-            <span>確認入帳 (${calculatedSubtotal})</span>
+            <span>確認入帳 ({userCurrency.symbol} {calculatedSubtotal})</span>
           </button>
         </div>
       </div>

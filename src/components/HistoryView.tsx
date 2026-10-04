@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { Search, ChevronDown, ChevronUp, Trash2, Calendar, Image } from 'lucide-react';
-import type { Receipt, ExpenseItem, Category } from '../types/receipt';
+import { Search, ChevronDown, ChevronUp, Trash2, Calendar, Image, Globe } from 'lucide-react';
+import type { Receipt, ExpenseItem, Category, CurrencyInfo } from '../types/receipt';
 import { deleteReceiptAndItems } from '../db/database';
 
 interface HistoryViewProps {
   receipts: Receipt[];
   items: ExpenseItem[];
   categories: Category[];
+  baseCurrency?: CurrencyInfo;
   onRefresh: () => void;
 }
 
@@ -14,8 +15,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   receipts,
   items,
   categories,
+  baseCurrency,
   onRefresh,
 }) => {
+  const currencySymbol = baseCurrency?.symbol || '$';
+  const baseCode = baseCurrency?.code || 'MYR';
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedReceiptId, setExpandedReceiptId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -110,9 +114,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-black text-slate-900">
-                      ${receipt.totalAmount.toLocaleString()}
-                    </span>
+                    <div className="text-right">
+                      <span className="text-sm font-black text-slate-900 block">
+                        {currencySymbol} {receipt.totalAmount.toLocaleString()}
+                      </span>
+                      {receipt.originalCurrency && receipt.originalCurrency !== baseCode && (
+                        <span className="text-[10px] text-sky-600 font-mono font-medium flex items-center justify-end gap-0.5">
+                          <Globe className="w-2.5 h-2.5" />
+                          <span>{receipt.originalCurrency} {receipt.originalTotalAmount?.toLocaleString()}</span>
+                        </span>
+                      )}
+                    </div>
                     {isExpanded ? (
                       <ChevronUp className="w-4 h-4 text-slate-400" />
                     ) : (
@@ -158,13 +170,20 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                               )}
                             </div>
 
-                            <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="flex items-center gap-2 flex-shrink-0 text-right">
                               <span className="text-[11px] text-slate-400">
                                 ×{item.quantity || 1}
                               </span>
-                              <span className="font-bold text-slate-900">
-                                ${((item.price || 0) * (item.quantity || 1)).toLocaleString()}
-                              </span>
+                              <div>
+                                <span className="font-bold text-slate-900 block">
+                                  {currencySymbol} {((item.price || 0) * (item.quantity || 1)).toLocaleString()}
+                                </span>
+                                {item.originalPrice !== undefined && receipt.originalCurrency && receipt.originalCurrency !== baseCode && (
+                                  <span className="text-[10px] text-slate-400 font-mono block">
+                                    {receipt.originalCurrency} {(item.originalPrice * (item.quantity || 1)).toLocaleString()}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         );

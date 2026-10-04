@@ -1,17 +1,19 @@
-import type { ReceiptScanResult, Category } from '../types/receipt';
+import type { ReceiptScanResult, Category, CurrencyInfo } from '../types/receipt';
 import { storageService } from './storageService';
 
 export async function parseReceiptWithGemini(
   base64Image: string,
-  categories: Category[]
+  categories: Category[],
+  baseCurrency?: CurrencyInfo
 ): Promise<ReceiptScanResult> {
   const apiKey = storageService.getApiKey();
   const modelName = storageService.getModelName();
+  const targetCurrency = baseCurrency || storageService.getBaseCurrency();
 
-  // If no API key is provided, return a realistic demo parse result so the user can test the UX immediately
+  // If no API key is provided, return a realistic demo parse result
   if (!apiKey) {
-    await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate AI processing delay
-    return getMockScanResult();
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return getMockScanResult(targetCurrency);
   }
 
   // Extract pure base64 and mime type from data URL
@@ -26,50 +28,57 @@ export async function parseReceiptWithGemini(
   const categoryNames = categories.map((c) => c.name).join('、');
   const todayStr = new Date().toISOString().split('T')[0];
 
-  const prompt = `你是一個頂級的發票收據結構化辨識專家與生活風格分析師。
-請仔細分析這張發票/收據照片，提取以下結構化資訊，並以繁體中文 (台灣) 與標準 JSON 格式輸出：
+  const prompt = `你是一個頂級的國際發票收據結構化辨識專家與生活風格分析師。
+使用者的居住地主要貨幣為：${targetCurrency.name} (代碼: ${targetCurrency.code}, 符號: ${targetCurrency.symbol})。
 
-可選的消費分類包含：[${categoryNames}]。
-請將每個品項分類至上述清單中最貼切的一項。若無法確定，請歸類為「其他開銷」。
+請仔細分析這張發票/收據照片，提取以下結構化資訊：
+1. 商店名稱 (storeName)、消費日期 (purchaseDate, 格式 YYYY-MM-DD，若模糊請使用 ${todayStr})。
+2. 辨識收據所在的國家/發行貨幣代碼 (detectedCurrency)，例如：JPY (日圓)、MYR (馬幣)、TWD (新台幣)、USD (美元)、EUR (歐元)、THB (泰銖)、SGD (新幣) 等。
+3. 匯率換算 (exchangeRate)：
+   - 若 detectedCurrency 與 ${targetCurrency.code} 相同，則 exchangeRate 為 1.0。
+   - 若 detectedCurrency 與 ${targetCurrency.code} 不同（例如拿了日本 JPY 的收據，但使用者居住在馬來西亞 MYR），請根據發票日期或近期市場參考匯率計算「1 單位原幣兌換為多少 ${targetCurrency.code}」（例如 1 JPY ≈ 0.031 MYR，則 exchangeRate 為 0.031；若 1 USD ≈ 4.72 MYR，則 exchangeRate 為 4.72）。
+4. 金額換算：
+   - originalTotalAmount: 發票上的原幣別總額。
+   - totalAmount: 轉換為 ${targetCurrency.code} 的總金額（四捨五入至小數點後 2 位；若是整數亦可）。
+5. 品項明細 (items)：
+   - itemName: 商品品項名稱 (繁體中文或保持原名)。
+   - originalPrice: 發票上的原幣單價。
+   - price: 換算為 ${targetCurrency.code} 後的單價 (四捨五入至小數點後 2 位)。
+   - quantity: 數量 (預設 1)。
+   - suggestedCategory: 從 [${categoryNames}] 中挑選最貼切的分類，若無法確定請填「其他開銷」。
+   - lifestyleTags: 可包含 caffeine (咖啡因/茶), sugar (甜點手搖炸物), healthy (生鮮蔬果健康), home_cooking (超市食材料理), dining_out (餐廳外食), entertainment (娛樂), essential (日常日用必備)。
+   - funNote: 一句超短趣味微備註 (例如："☕ 咖啡因加載", "🍟 罪惡感滿滿", "🥦 健康自律")。
+6. aiComment: 一句幽默溫馨的 AI 生活觀察短評。若為外幣海外消費，可幽默提及出國旅行/海外採購！
 
-此外，請為品項標記生活風格標籤 (lifestyleTags)：
-- caffeine: 咖啡、濃縮、茶飲、含咖啡因飲料
-- sugar: 珍珠奶茶、含糖飲料、甜點、蛋糕、手搖飲、炸物、零食
-- healthy: 生鮮蔬果、雞胸肉、蛋、生鮮肉品、沙拉、燕麥、無糖優格
-- home_cooking: 料理食材、調味料、米、生鮮超市食材
-- dining_out: 餐廳、外食、便當、快餐
-- entertainment: 電影、遊戲、KTV、玩具
-- essential: 衛生紙、沐浴乳、日常必備品
-
-並為特別有特色的品項給予一句超短趣味備註 (funNote)，例如：「☕ 咖啡因加載」、「🍟 罪惡感滿滿」、「🥦 健康自律」、「🏠 居家大廚」。
-
-最後，給予這張發票一句幽默溫馨的 AI 生活觀察短評 (aiComment)。
-如果發票上的日期缺失或模糊，請推算或使用今日日期（${todayStr}）。
-
-請務必返回純 JSON 格式，不要包含任何額外的 Markdown 標籤或對話文字，格式範例如下：
+請務必返回純 JSON 格式，格式範例如下：
 {
-  "storeName": "全聯福利中心",
+  "storeName": "FamilyMart 日本東京門市",
   "purchaseDate": "${todayStr}",
-  "totalAmount": 268,
+  "detectedCurrency": "JPY",
+  "exchangeRate": 0.031,
+  "originalTotalAmount": 1500,
+  "totalAmount": 46.5,
   "items": [
     {
-      "itemName": "林鳳營鮮乳",
-      "price": 92,
-      "quantity": 1,
-      "suggestedCategory": "生鮮超市",
-      "lifestyleTags": ["healthy", "home_cooking"],
-      "funNote": "🥦 補給優質蛋白質"
-    },
-    {
-      "itemName": "熱美式咖啡",
-      "price": 45,
+      "itemName": "特濃黑咖啡 (Black Coffee)",
+      "originalPrice": 200,
+      "price": 6.2,
       "quantity": 1,
       "suggestedCategory": "餐飲食品",
       "lifestyleTags": ["caffeine"],
-      "funNote": "☕ 續命咖啡因"
+      "funNote": "☕ 東京街頭續命咖啡"
+    },
+    {
+      "itemName": "日式生乳卷 (Roll Cake)",
+      "originalPrice": 1300,
+      "price": 40.3,
+      "quantity": 1,
+      "suggestedCategory": "餐飲食品",
+      "lifestyleTags": ["sugar"],
+      "funNote": "🍰 出國旅遊必吃甜點"
     }
   ],
-  "aiComment": "採買了鮮乳跟咖啡，看來今天生活充滿朝氣！"
+  "aiComment": "在日本便利商店大買甜點與黑咖啡，出國就是要好好犒賞自己！✈️🍰"
 }`;
 
   const requestBody = {
@@ -119,7 +128,6 @@ export async function parseReceiptWithGemini(
   }
 
   try {
-    // Clean potential markdown blocks if any
     const cleanedJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed: ReceiptScanResult = JSON.parse(cleanedJson);
     return parsed;
@@ -129,39 +137,55 @@ export async function parseReceiptWithGemini(
   }
 }
 
-// Demo mock data when no API Key is present
-export function getMockScanResult(): ReceiptScanResult {
+// Demo mock data with overseas currency conversion
+export function getMockScanResult(baseCurrency?: CurrencyInfo): ReceiptScanResult {
   const today = new Date().toISOString().split('T')[0];
+  const target = baseCurrency || storageService.getBaseCurrency();
+
+  // If user base is MYR, simulate a Japanese JPY receipt!
+  // If user base is JPY, simulate a US USD receipt!
+  const isTargetMYR = target.code === 'MYR';
+  const detectedCurrency = isTargetMYR ? 'JPY' : 'USD';
+  const exchangeRate = isTargetMYR ? 0.031 : 155; // 1 JPY = 0.031 MYR; or 1 USD = 155 JPY
+  const originalTotal = isTargetMYR ? 2500 : 25;
+  const convertedTotal = Math.round(originalTotal * exchangeRate * 100) / 100;
+
   return {
-    storeName: '7-ELEVEN 概念門市',
+    storeName: isTargetMYR ? 'FamilyMart 日本東京涉谷門市' : 'Starbucks Reserve Seattle',
     purchaseDate: today,
-    totalAmount: 185,
+    detectedCurrency: detectedCurrency,
+    exchangeRate: exchangeRate,
+    originalTotalAmount: originalTotal,
+    totalAmount: convertedTotal,
     items: [
       {
-        itemName: '特大杯美式咖啡 (冰)',
-        price: 60,
+        itemName: isTargetMYR ? '極上黑咖啡 (Black Coffee)' : 'Nitro Cold Brew Coffee',
+        originalPrice: isTargetMYR ? 300 : 6,
+        price: Math.round((isTargetMYR ? 300 : 6) * exchangeRate * 100) / 100,
         quantity: 1,
         suggestedCategory: '餐飲食品',
         lifestyleTags: ['caffeine'],
-        funNote: '☕ 靈魂充能咖啡因',
+        funNote: '☕ 海外旅行充能咖啡因',
       },
       {
-        itemName: '波的多洋芋片蚵仔煎風味',
-        price: 35,
+        itemName: isTargetMYR ? '北海道特濃牛乳生乳卷' : 'Chocolate Croissant',
+        originalPrice: isTargetMYR ? 1200 : 7,
+        price: Math.round((isTargetMYR ? 1200 : 7) * exchangeRate * 100) / 100,
         quantity: 1,
         suggestedCategory: '餐飲食品',
         lifestyleTags: ['sugar'],
-        funNote: '🍟 罪惡感療癒零食',
+        funNote: '🍰 旅遊必備甜點罪惡感',
       },
       {
-        itemName: '舒潔抽取式衛生紙',
-        price: 90,
+        itemName: isTargetMYR ? '休足時間舒緩貼布 (6入)' : 'Stainless Steel Tumbler',
+        originalPrice: isTargetMYR ? 1000 : 12,
+        price: Math.round((isTargetMYR ? 1000 : 12) * exchangeRate * 100) / 100,
         quantity: 1,
         suggestedCategory: '日常用品',
         lifestyleTags: ['essential'],
-        funNote: '🧻 居家生存必備物資',
+        funNote: '🧻 自由行萬步救援神物',
       },
     ],
-    aiComment: '（示範資料）一杯冰美式加上洋芋片，打工人的經典療癒小確幸！☕✨',
+    aiComment: `（示範資料：海外日本發票自動換算）偵測到日圓 (JPY) 發票，已依參考匯率換算為你的居住地貨幣 ${target.name}！✈️✨`,
   };
 }
