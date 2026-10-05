@@ -138,8 +138,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               onChange={(e) => setModelName(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
             >
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash（最新推薦，速度快且辨識精準）</option>
-              <option value="gemini-1.5-flash">Gemini 1.5 Flash（經典穩定）</option>
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash（官方最新推薦，速度超快且辨識精準）</option>
+              <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
             </select>
           </div>
 

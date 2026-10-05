@@ -7,7 +7,10 @@ export async function parseReceiptWithGemini(
   baseCurrency?: CurrencyInfo
 ): Promise<ReceiptScanResult> {
   const apiKey = storageService.getApiKey();
-  const modelName = storageService.getModelName();
+  let modelName = storageService.getModelName();
+  if (!modelName || modelName.startsWith('gemini-2') || modelName.startsWith('gemini-1')) {
+    modelName = 'gemini-3.8-flash';
+  }
   const targetCurrency = baseCurrency || storageService.getBaseCurrency();
 
   // If no API key is provided, return a realistic demo parse result

@@ -37,7 +37,12 @@ export const storageService = {
   },
 
   getModelName(): string {
-    return localStorage.getItem(MODEL_NAME_STORAGE) || 'gemini-2.5-flash';
+    const model = localStorage.getItem(MODEL_NAME_STORAGE);
+    if (!model || model.startsWith('gemini-2') || model.startsWith('gemini-1')) {
+      localStorage.setItem(MODEL_NAME_STORAGE, 'gemini-3.8-flash');
+      return 'gemini-3.8-flash';
+    }
+    return model;
   },
 
   setModelName(model: string): void {
